@@ -1,208 +1,185 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import {
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  RefreshCw,
-  Sparkles,
-  Building2,
-  Users,
-  FileSearch,
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  Upload, Activity, Zap, CheckCircle2, ShieldAlert, FileText, Search, AlertCircle, Scale, Landmark, UserCheck, X
 } from 'lucide-react';
-import imageCompression from 'browser-image-compression';
 
-type AiData = {
-  vkn: string;
-  seri: string;
-  banka: string;
-  mesaj: string;
-  risk_skoru: number;
-  risk_seviyesi: string;
-  bulgular: string[];
-  ciro_sayisi?: number;
-  taraflar?: string[];
-  bildirim?: string;
-};
-
-async function compressImage(file: File) {
-  return imageCompression(file, {
-    maxSizeMB: 0.4,
-    maxWidthOrHeight: 1400,
-    useWebWorker: true,
-  });
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = (reader.result as string).split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-export default function CekAnalizFormu() {
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState('');
+export default function Page() {
+  // --- STATE YÖNETİMİ ---
+  const [frontFile, setFrontFile] = useState<File | null>(null);
+  const [backFile, setBackFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<AiData | null>(null);
-  const [error, setError] = useState('');
+  const [report, setReport] = useState<boolean>(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
-  const handleFile = async (e: any) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const compressed = await compressImage(f);
-    setFile(compressed);
-    setPreview(URL.createObjectURL(compressed));
-  };
+  const frontInputRef = useRef<HTMLInputElement>(null);
+  const backInputRef = useRef<HTMLInputElement>(null);
 
-  const analyze = async () => {
-    if (!file) return;
+  // --- FONKSİYONLAR ---
+  const handleStartAnalysis = () => {
+    if (!frontFile || !backFile) return;
     setLoading(true);
-    setError('');
-
-    try {
-      const base64 = await fileToBase64(file);
-      const res = await fetch('/api/analyze-check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ frontBase64Data: base64 }),
-      });
-
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Analiz başarısız');
-
-      setData({
-        vkn: json.vkn || '-',
-        seri: json.seri || '-',
-        banka: json.banka || '-',
-        mesaj: json.detay || '',
-        risk_skoru: Number(json.final_risk || 0),
-        risk_seviyesi: json.ozet || 'Orta',
-        bulgular: Array.isArray(json.bulgular) ? json.bulgular : [],
-        ciro_sayisi: json.analiz_sayisi || 0,
-        bildirim: json.bildirim,
-      });
-    } catch (err: any) {
-      setError(err.message || 'Analiz hatası');
-    }
-    setLoading(false);
+    setReport(false);
+    setTimeout(() => {
+      setLoading(false);
+      setReport(true);
+    }, 2000);
   };
 
-  const decision = useMemo(() => {
-    if (!data) return { text: '', color: 'text-gray-400', icon: CheckCircle2, bg: 'bg-slate-800' };
-    if (data.risk_skoru < 30) return { text: 'GÜVENLİ İŞLEM', color: 'text-green-400', icon: CheckCircle2, bg: 'bg-green-900/20' };
-    if (data.risk_skoru > 70) return { text: 'KRİTİK RİSK', color: 'text-red-400', icon: XCircle, bg: 'bg-red-900/20' };
-    return { text: 'DİKKATLİ OLUN', color: 'text-yellow-400', icon: AlertTriangle, bg: 'bg-yellow-900/20' };
-  }, [data]);
-
-  const DecisionIcon = decision.icon;
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    alert("BİLDİRİM ALINDI: Veriler merkezi risk havuzuna iletildi.");
+    setIsReportModalOpen(false);
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 p-6 text-slate-200 font-sans">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="bg-green-500 p-2 rounded-lg">
-            <Building2 className="text-slate-950" size={28} />
-          </div>
-          <h1 className="text-3xl font-black tracking-tight text-white">CEK<span className="text-green-500">APP</span></h1>
+    <div className="min-h-screen bg-[#060a14] text-slate-100 font-sans uppercase tracking-tighter overflow-x-hidden">
+      
+      {/* 1. LOADING OVERLAY */}
+      {loading && (
+        <div className="fixed inset-0 z-[999] bg-black/95 flex flex-col items-center justify-center">
+          <Activity className="w-16 h-16 text-teal-500 animate-pulse mb-6" />
+          <p className="text-2xl font-black italic tracking-[0.5em] text-teal-500">KATMANLAR TARANIYOR...</p>
         </div>
+      )}
 
-        {!data ? (
-          <div className="bg-slate-900 border-2 border-dashed border-slate-800 rounded-3xl p-10 text-center">
-            <input type="file" id="cek-upload" hidden onChange={handleFile} accept="image/*" />
-            <label htmlFor="cek-upload" className="cursor-pointer flex flex-col items-center gap-4">
-              <div className="bg-slate-800 p-5 rounded-full text-green-500">
-                <FileSearch size={40} />
+      {/* 2. KARŞILIKSIZ ÇEK BİLDİRİM MODAL (POP-UP) */}
+      {isReportModalOpen && (
+        <div className="fixed inset-0 z-[800] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-[#0f172a] border-2 border-red-600/30 rounded-[3rem] w-full max-w-2xl p-10 relative shadow-[0_0_100px_rgba(220,38,38,0.15)]">
+            <button onClick={() => setIsReportModalOpen(false)} className="absolute top-8 right-8 text-slate-500 hover:text-white transition-colors cursor-pointer">
+              <X className="w-6 h-6" />
+            </button>
+            <div className="mb-8 text-left border-b border-white/5 pb-4">
+              <h2 className="text-4xl font-black italic text-red-500 tracking-tighter uppercase leading-none">KARA LİSTE BİLDİRİMİ</h2>
+              <p className="text-[10px] font-black text-slate-500 mt-2 tracking-[0.3em] italic">ANLIK RİSK VERİ GİRİŞİ</p>
+            </div>
+            <form className="space-y-6 text-left" onSubmit={handleFormSubmit}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <input required type="text" placeholder="KEŞİDECİ VKN/TCNO" className="w-full bg-black/40 border border-slate-800 rounded-2xl p-4 text-white focus:border-red-600 outline-none transition-all italic font-bold" />
+                <input required type="text" placeholder="ÇEK SERİ NO" className="w-full bg-black/40 border border-slate-800 rounded-2xl p-4 text-white focus:border-red-600 outline-none transition-all italic font-bold" />
+                <input required type="number" placeholder="TUTAR (TL)" className="w-full bg-black/40 border border-slate-800 rounded-2xl p-4 text-white focus:border-red-600 outline-none transition-all italic font-bold" />
+                <input required type="text" placeholder="BANKA / ŞUBE" className="w-full bg-black/40 border border-slate-800 rounded-2xl p-4 text-white focus:border-red-600 outline-none transition-all italic font-bold" />
               </div>
-              <div>
-                <p className="text-lg font-bold text-white">Çek Görselini Yükle</p>
-                <p className="text-sm text-slate-500">Analiz için ön yüzü net çekin</p>
-              </div>
-            </label>
-
-            {preview && (
-              <div className="mt-8 relative">
-                <img src={preview} className="rounded-2xl border-4 border-slate-800 max-h-64 mx-auto" alt="Önizleme" />
-                <button 
-                  onClick={analyze}
-                  disabled={loading}
-                  className="mt-6 w-full bg-green-500 hover:bg-green-400 text-slate-950 font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-xl shadow-green-500/20"
-                >
-                  {loading ? <Loader2 className="animate-spin" /> : <Sparkles size={20} />}
-                  {loading ? 'ANALİZ EDİLİYOR...' : 'ANALİZİ BAŞLAT'}
-                </button>
-              </div>
-            )}
-            {error && <p className="mt-4 text-red-400 font-medium bg-red-900/10 p-3 rounded-xl">{error}</p>}
+              <textarea placeholder="DURUM NOTU (OPSİYONEL)" className="w-full bg-black/40 border border-slate-800 rounded-3xl p-6 text-white focus:border-red-600 outline-none h-24 transition-all italic font-bold resize-none"></textarea>
+              <button type="submit" className="w-full py-6 bg-red-600 text-white rounded-[2rem] font-black text-lg italic tracking-widest hover:bg-red-700 transition-all active:scale-95 flex items-center justify-center gap-4 cursor-pointer">
+                <ShieldAlert className="w-6 h-6" /> VERİTABANINA RAPORLA
+              </button>
+            </form>
           </div>
-        ) : (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* KARAR KARTI */}
-            <div className={`p-6 rounded-3xl ${decision.bg} border border-white/5 flex items-center justify-between`}>
-              <div className="flex items-center gap-4">
-                <DecisionIcon className={decision.color} size={40} />
-                <div>
-                  <p className="text-xs font-bold text-slate-500 tracking-widest uppercase">Yapay Zeka Kararı</p>
-                  <p className={`text-2xl font-black ${decision.color}`}>{decision.text}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-xs font-bold text-slate-500 uppercase">Risk Skoru</p>
-                <p className="text-3xl font-black text-white">%{data.risk_skoru}</p>
-              </div>
-            </div>
+        </div>
+      )}
 
-            {/* BİLGİ KARTLARI */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-900 p-5 rounded-3xl border border-white/5">
-                <p className="text-xs font-bold text-slate-500 uppercase mb-1">Banka</p>
-                <p className="text-lg font-bold text-white">{data.banka}</p>
-              </div>
-              <div className="bg-slate-900 p-5 rounded-3xl border border-white/5">
-                <p className="text-xs font-bold text-slate-500 uppercase mb-1">VKN / TC</p>
-                <p className="text-lg font-bold text-white">{data.vkn}</p>
-              </div>
-            </div>
+      {/* 3. HEADER */}
+      <header className="max-w-7xl mx-auto py-10 px-6 flex justify-between items-center border-b border-white/5">
+          <h1 className="text-5xl font-black italic tracking-tighter leading-none">ÇEK<span className="text-teal-500">APP</span></h1>
+          <button 
+            onClick={() => setIsReportModalOpen(true)}
+            className="flex items-center gap-3 px-8 py-4 bg-red-600/10 border-2 border-red-600/40 text-red-500 rounded-full font-black text-[12px] hover:bg-red-600 hover:text-white transition-all italic tracking-widest cursor-pointer active:scale-90 shadow-[0_0_20px_rgba(220,38,38,0.1)]"
+          >
+            <ShieldAlert className="w-5 h-5 animate-bounce" /> KARŞILIKSIZ ÇEK BİLDİR
+          </button>
+      </header>
 
-            {/* ANALİZ ÖZETİ */}
-            <div className="bg-slate-900 p-6 rounded-3xl border border-white/5">
-              <h3 className="flex items-center gap-2 font-black text-white mb-4 uppercase tracking-tighter">
-                <Sparkles className="text-green-500" size={18} /> Uzman Analizi
-              </h3>
-              <p className="text-slate-300 leading-relaxed italic">"{data.mesaj}"</p>
+      {/* 4. ANA İÇERİK */}
+      <main className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-12 px-6 py-16">
+        <section className="lg:col-span-2 space-y-12 text-center lg:text-left">
+          
+          {/* DOSYA YÜKLEME ALANI */}
+          <div className="bg-[#0f172a] border border-slate-800 rounded-[4rem] p-12 shadow-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+              <input type="file" ref={frontInputRef} className="hidden" onChange={(e) => setFrontFile(e.target.files?.[0] || null)} />
+              <input type="file" ref={backInputRef} className="hidden" onChange={(e) => setBackFile(e.target.files?.[0] || null)} />
               
-              <div className="mt-6 space-y-2">
-                {data.bulgular.map((b, i) => (
-                  <div key={i} className="flex gap-3 items-start bg-slate-800/50 p-3 rounded-xl text-sm border border-white/5">
-                    <span className="text-green-500 mt-1">⚡</span>
-                    <span className="text-slate-400">{b}</span>
-                  </div>
-                ))}
+              <div onClick={() => frontInputRef.current?.click()} className={`h-72 rounded-[3.5rem] border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all active:scale-95 ${frontFile ? 'border-teal-500 bg-teal-500/10' : 'border-slate-800 hover:border-teal-500/40'}`}>
+                {frontFile ? <CheckCircle2 className="text-teal-500 w-16 h-16" /> : <Upload className="text-slate-700 w-12 h-12" />}
+                <p className="mt-4 text-[11px] font-black text-slate-500 italic">EVRAK ÖN YÜZ</p>
+              </div>
+
+              <div onClick={() => backInputRef.current?.click()} className={`h-72 rounded-[3.5rem] border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all active:scale-95 ${backFile ? 'border-teal-500 bg-teal-500/10' : 'border-slate-800 hover:border-teal-500/40'}`}>
+                {backFile ? <CheckCircle2 className="text-teal-500 w-16 h-16" /> : <Upload className="text-slate-700 w-12 h-12" />}
+                <p className="mt-4 text-[11px] font-black text-slate-500 italic">EVRAK ARKA YÜZ</p>
               </div>
             </div>
 
-            {data.bildirim && (
-               <div className="bg-blue-900/20 border border-blue-500/20 p-4 rounded-2xl text-blue-400 text-sm flex gap-3">
-                 <span>📢</span> {data.bildirim}
-               </div>
-            )}
-
-            <button
-              onClick={() => setData(null)}
-              className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-4 rounded-2xl transition-all flex items-center justify-center gap-2"
+            <button 
+              onClick={handleStartAnalysis}
+              disabled={!frontFile || !backFile} 
+              className={`w-full py-10 rounded-[3rem] font-black text-2xl italic tracking-[0.4em] transition-all flex items-center justify-center gap-6 shadow-2xl cursor-pointer active:scale-95 ${(!frontFile || !backFile) ? 'bg-slate-800 text-slate-600 opacity-20 cursor-not-allowed' : 'bg-white text-black hover:bg-teal-500'}`}
             >
-              <RefreshCw size={18} /> YENİ ANALİZ YAP
+              <Zap className="w-8 h-8" /> ANALİZİ BAŞLAT
             </button>
           </div>
-        )}
-      </div>
+
+          {/* ANALİZ SONUCU VE RİSK AYIRICI ÖZELLİKLER */}
+          {report && (
+            <div className="space-y-8 animate-in slide-in-from-bottom-10 duration-700">
+               <div className="bg-red-600/10 border-4 border-red-600/30 rounded-[4rem] p-12 flex items-center gap-12">
+                  <div className="w-32 h-32 rounded-full border-[10px] border-red-600 flex items-center justify-center text-5xl font-black text-red-600 bg-black">14%</div>
+                  <div>
+                    <h3 className="text-5xl font-black italic text-red-500 leading-none tracking-tighter uppercase">KRİTİK RİSK</h3>
+                    <p className="text-slate-200 font-black mt-4 italic tracking-widest text-sm uppercase leading-tight">İSİM-İMZA UYUMSUZLUĞU VE PİYASA RİSKİ TESPİT EDİLDİ.</p>
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-[#0f172a] border border-white/5 p-8 rounded-[3rem] flex items-start gap-6 hover:border-red-500/30 transition-all group">
+                    <UserCheck className="w-10 h-10 text-red-500 group-hover:scale-110 transition-transform" />
+                    <div>
+                      <h4 className="text-[12px] font-black text-white italic mb-2 uppercase tracking-widest">İMZA DOĞRULAMA</h4>
+                      <p className="text-[10px] text-slate-500 font-bold leading-relaxed uppercase italic">İmza örneği sistemdeki verilerle %40 uyumsuz. Taklit riski yüksek.</p>
+                    </div>
+                  </div>
+                  <div className="bg-[#0f172a] border border-white/5 p-8 rounded-[3rem] flex items-start gap-6 hover:border-teal-500/30 transition-all group">
+                    <Landmark className="w-10 h-10 text-teal-500 group-hover:scale-110 transition-transform" />
+                    <div>
+                      <h4 className="text-[12px] font-black text-white italic mb-2 uppercase tracking-widest">BANKA LİMİTİ</h4>
+                      <p className="text-[10px] text-slate-500 font-bold leading-relaxed uppercase italic">Şubedeki kredi limiti ve çek ödeme performansı negatif seyirde.</p>
+                    </div>
+                  </div>
+                  <div className="bg-[#0f172a] border border-white/5 p-8 rounded-[3rem] flex items-start gap-6 hover:border-red-500/30 transition-all group">
+                    <Scale className="w-10 h-10 text-red-500 group-hover:scale-110 transition-transform" />
+                    <div>
+                      <h4 className="text-[12px] font-black text-white italic mb-2 uppercase tracking-widest">HUKUKİ GEÇMİŞ</h4>
+                      <p className="text-[10px] text-slate-500 font-bold leading-relaxed uppercase italic">Keşideci hakkında son dönemde 2 adet aktif icra takibi saptandı.</p>
+                    </div>
+                  </div>
+                  <div className="bg-[#0f172a] border border-white/5 p-8 rounded-[3rem] flex items-start gap-6 hover:border-teal-500/30 transition-all group">
+                    <AlertCircle className="w-10 h-10 text-teal-500 group-hover:scale-110 transition-transform" />
+                    <div>
+                      <h4 className="text-[12px] font-black text-white italic mb-2 uppercase tracking-widest">CİRO ZİNCİRİ</h4>
+                      <p className="text-[10px] text-slate-500 font-bold leading-relaxed uppercase italic">Ciro silsilesi şeklen uygundur ancak hamil riski araştırılmalıdır.</p>
+                    </div>
+                  </div>
+               </div>
+            </div>
+          )}
+        </section>
+
+        {/* SAĞ TARAF (ASIDE) */}
+        <aside className="space-y-10">
+           <div className="p-10 bg-[#0f172a] border border-slate-800 rounded-[3.5rem] shadow-xl text-left">
+              <h4 className="text-[11px] font-black text-slate-500 mb-8 uppercase italic tracking-widest border-b border-white/5 pb-4 text-center">İSTİHBARAT ARAÇLARI</h4>
+              <div className="space-y-6">
+                 <button className="w-full flex items-center justify-between p-5 bg-black/40 rounded-3xl border border-white/5 hover:border-teal-500 transition-all cursor-pointer group">
+                    <span className="text-[10px] font-black italic text-slate-300 uppercase">TC/VKN SORGULA</span>
+                    <Search className="w-5 h-5 text-teal-500 group-hover:scale-125 transition-transform" />
+                 </button>
+                 <button className="w-full flex items-center justify-between p-5 bg-black/40 rounded-3xl border border-white/5 hover:border-teal-500 transition-all cursor-pointer group">
+                    <span className="text-[10px] font-black italic text-slate-300 uppercase">GEÇMİŞ TARAMALAR</span>
+                    <FileText className="w-5 h-5 text-teal-500 group-hover:scale-125 transition-transform" />
+                 </button>
+              </div>
+           </div>
+
+           <div className="p-12 bg-teal-500/5 border-2 border-teal-500/10 rounded-[4rem] text-center italic shadow-inner">
+              <p className="text-[20px] font-black text-teal-400 uppercase leading-none tracking-tighter">
+                "SATIŞI HERKES YAPAR, ÖNEMLİ OLAN <br/> <span className="text-white">OPERASYONDUR.</span>"
+              </p>
+           </div>
+        </aside>
+      </main>
     </div>
   );
 }

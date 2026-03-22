@@ -1,0 +1,83 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { AlertTriangle, Fingerprint } from 'lucide-react';
+
+// --- PİYASA VERİ AKIŞI BİLEŞENİ ---
+const MarketFlow = () => {
+  // Gerçekçi bir akış için pool oluşturduk
+  const companyPool = [
+    { name: "ÖZ-DEMİR LOJİSTİK A.Ş.", score: 22, analysis: "LOJİSTİK AKIŞI RİSKLİ: TEDARİK AĞINDA AKSAMA SİNYALLERİ VAR." },
+    { name: "TEKNİK YAPI İNŞAAT LTD.", score: 5, analysis: "KRİTİK UYARI: VARLIK SATIŞI SÜRECİ TETİKLENDİ." },
+    { name: "GÜNEY GIDA PAZARLAMA", score: 41, analysis: "FİNANSAL VERİ: ÖDEME PROTOKOLÜ REVİZE EDİLDİ." },
+    { name: "KILIÇ MUTFAK ÜRÜNLERİ", score: 12, analysis: "DİKKAT: İMZA YETKİSİ TARTIŞMALI EVRAK TESPİTİ." },
+    { name: "ASLAN TEKSTİL DIŞ TİC.", score: 34, analysis: "PİYASA VERİSİ: VADE UZATIM TALEPLERİ ARTIYOR." }
+  ];
+
+  const [liveList, setLiveList] = useState(companyPool.slice(0, 3));
+
+  // Operasyonel canlılık: Listeyi belirli aralıklarla güncelle (Opsiyonel)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const shuffled = [...companyPool].sort(() => 0.5 - Math.random());
+      setLiveList(shuffled.slice(0, 3));
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <section className="space-y-10 animate-in fade-in slide-in-from-right-10 duration-700">
+      {/* VERİ AKIŞ KUTUSU */}
+      <div className="bg-[#0f172a] border border-red-500/20 rounded-[3.5rem] p-8 shadow-2xl relative overflow-hidden">
+        {/* ARKA PLAN EFEKTİ */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 blur-[50px] rounded-full"></div>
+        
+        <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-4">
+          <div className="flex items-center gap-4">
+            <AlertTriangle className="w-6 h-6 text-red-500 animate-pulse" />
+            <h4 className="text-white text-[12px] font-black tracking-widest uppercase italic">PİYASA VERİ AKIŞI</h4>
+          </div>
+          <div className="flex gap-1">
+            <span className="w-1 h-1 bg-red-500 rounded-full animate-ping"></span>
+            <span className="text-[8px] font-black text-red-500 uppercase">LIVE</span>
+          </div>
+        </div>
+
+        <div className="space-y-8">
+          {liveList.map((company, i) => (
+            <div key={i} className="border-b border-slate-800/40 pb-6 last:border-0 group cursor-default">
+              <div className="flex justify-between items-start mb-3">
+                <h5 className="text-[11px] font-black text-slate-200 group-hover:text-red-400 transition-colors leading-tight uppercase max-w-[80%] tracking-tighter">
+                  {company.name}
+                </h5>
+                <div className="text-right">
+                  <span className="text-red-500 font-black text-[13px] italic">{company.score}%</span>
+                  <p className="text-[7px] text-slate-600 font-bold uppercase tracking-widest">RİSK</p>
+                </div>
+              </div>
+              <div className="p-4 bg-black/40 rounded-[1.5rem] border border-slate-800/50 group-hover:border-red-500/30 transition-all">
+                <p className="text-[10px] text-slate-500 italic lowercase leading-snug tracking-wide">
+                  <span className="text-red-500/60 mr-2 uppercase not-italic font-black text-[8px]">ANALİZ:</span>
+                  {company.analysis}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* OPERASYONEL MANTRA */}
+      <div className="group p-10 bg-teal-500/5 border-2 border-teal-500/10 rounded-[3.5rem] text-center italic shadow-xl hover:bg-teal-500/10 transition-all">
+         <div className="w-12 h-12 bg-teal-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-teal-500/20 group-hover:scale-110 transition-transform">
+           <Fingerprint className="text-teal-500 w-6 h-6" />
+         </div>
+         <p className="text-[12px] font-black text-white/40 uppercase mb-2 tracking-[0.3em] not-italic">OPERASYONEL MANTRA</p>
+         <p className="text-[16px] font-black text-teal-400 uppercase leading-tight tracking-tighter shadow-teal-500/20">
+           "SATISI HERKES YAPAR, ÖNEMLİ OLAN OPERASYONDUR."
+         </p>
+      </div>
+    </section>
+  );
+};
+
+export default MarketFlow;

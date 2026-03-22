@@ -1,0 +1,24 @@
+'use client';
+
+export const RiskTicker = () => {
+  const risks = [
+    "İSTANBUL / GIDA: KARŞILIKSIZ ÇEK ORANINDA %12 ARTIŞ TESPİT EDİLDİ",
+    "ANKARA / İNŞAAT: KONKORDATO İLANLARI SON 24 SAATTE YOĞUNLAŞTI",
+    "LOJİSTİK: AKARYAKIT ENDEKSLİ ÖDEME GECİKMELERİ (ORT. 14 GÜN)",
+    "TEKSTİL: CİRO SİLSİLESİ KOPUKLUĞU VE İMZA UYUMSUZLUĞU RİSKİ",
+    "FİNANS: FAKTORİNG BLOKE ORANLARI YÜKSELİŞE GEÇTİ"
+  ];
+
+  return (
+    <div className="bg-red-600/10 border-y border-red-600/20 py-3 overflow-hidden whitespace-nowrap italic font-black text-[10px] tracking-[0.2em] text-red-500">
+      <div className="flex animate-marquee shrink-0">
+        {Array(3).fill(risks).flat().map((r, i) => (
+          <span key={i} className="mx-14 flex items-center gap-4">
+            <span className="w-2 h-2 bg-red-600 rounded-full animate-ping"></span>
+            !!! {r} !!!
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+};
