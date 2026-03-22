@@ -1,88 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. API Key Kontrolü
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ success: false, error: "API Anahtarı (.env.local) bulunamadı!" }, { status: 500 });
+    const serperKey = process.env.SERPER_API_KEY;
+    if (!serperKey) {
+      return NextResponse.json({ success: false, error: "SERPER API key eksik." }, { status: 500 });
     }
 
-    // 2. Gelen Veriyi Al (Yeni page.tsx yapısına uygun: data ve type geliyor)
-    const body = await req.json();
-    const { type, data } = body; 
-
-    if (!data) {
-      return NextResponse.json({ success: false, error: "Analiz edilecek veri (görsel veya metin) eksik!" }, { status: 400 });
+    const { data: firmaAdi } = await req.json();
+    if (!firmaAdi || firmaAdi.length < 3) {
+      return NextResponse.json({ success: false, error: "Firma adı geçersiz." }, { status: 400 });
     }
 
-    // 3. Dinamik Prompt ve İçerik Hazırlığı
-    const isHizli = type === 'hizli';
-    
-    // Prompt'u moda göre seçiyoruz
-    const systemPrompt = isHizli 
-      ? "Sen bir ticari istihbarat uzmanısın. Paylaşılan metindeki IBAN, Vergi No (VKN), TCKN veya hesap bilgilerini ayıkla. Bu verilerin formatını ve ticari riskini (0-100) analiz et. Yanıtı SADECE saf JSON ver: { \"banka\": \"Tespit Edilen Kurum\", \"seri\": \"Tespit Edilen No\", \"risk_skoru\": 0, \"mesaj\": \"...\" }"
-      : "Sen bir çek/senet analiz uzmanısın. Görseldeki banka adı, seri no ve risk skorunu (0-100) oku. Yanıtı SADECE saf JSON formatında ver, başka metin ekleme: { \"banka\": \"...\", \"seri\": \"...\", \"risk_skoru\": 0, \"mesaj\": \"...\" }";
-
-    // Gemini'ye gidecek parça listesi
-    const contentParts: any[] = [{ text: systemPrompt }];
-
-    if (isHizli) {
-      // Hızlı analizde data direkt metindir
-      contentParts.push({ text: `Analiz edilecek ticari veri: ${data}` });
-    } else {
-      // Çek/Senet modunda data Base64 görseldir
-      contentParts.push({ inline_data: { mime_type: "image/jpeg", data: data } });
-    }
-
-    // 4. Gemini API İstek
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-    
-    const geminiRes = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: contentParts }],
-        generationConfig: { 
-          responseMimeType: "application/json",
-          temperature: 0.1 
-        }
-      })
+    // SERPER GOOGLE ARAMA
+    const query = `"${firmaAdi}" konkordato OR iflas OR mühlet OR haciz site:ilan.gov.tr`;
+    const serperRes = await fetch("https://google.serper.dev/search", {
+      method: "POST",
+      headers: { "X-API-KEY": serperKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ q: query, gl: "tr", hl: "tr" })
     });
 
-    // 5. Hata Yönetimi
-    if (!geminiRes.ok) {
-      const errorData = await geminiRes.json().catch(() => ({}));
-      const errorMessage = errorData.error?.message || "Google API Hatası";
-      
-      if (geminiRes.status === 429) {
-        return NextResponse.json({ 
-          success: false, 
-          error: "Hız sınırına takıldık. Lütfen 30-60 saniye bekleyip tekrar dene." 
-        }, { status: 429 });
-      }
-      
-      return NextResponse.json({ success: false, error: errorMessage }, { status: geminiRes.status });
-    }
+    if (!serperRes.ok) throw new Error("Serper API hatası.");
+    const searchData = await serperRes.json();
+    const organic = searchData?.organic || [];
+    const snippetsText = organic.map((o: any) => o.snippet || o.title || '').join(' ').toLowerCase();
 
-    // 6. Veriyi İşle ve Dön
-    const resJson = await geminiRes.json();
-    const rawText = resJson.candidates[0].content.parts[0].text;
-    const aiResult = JSON.parse(rawText);
+    // BASİT YORUMLAMA
+    const dangerWords = ["konkordato", "iflas", "mühlet", "haciz", "protesto", "tasfiye", "mahkemesi"];
+    const detected = dangerWords.filter(w => snippetsText.includes(w));
+    let riskScore = 0;
+    let yorum = "";
+
+    if (detected.length > 0) {
+      riskScore = 70 + Math.min(detected.length * 5, 30); // max 100
+      yorum = `KRİTİK BULGU: Google sonuçlarında firma hakkında [${detected.join(", ")}] kayıtları saptandı!`;
+    } else if (snippetsText.length < 50) {
+      riskScore = 20;
+      yorum = `Dijital veri sınırlı. Banka teyidi ile işlem önerilir.`;
+    } else {
+      riskScore = 10;
+      yorum = `Resmi ilan ve haberlerde aktif risk kaydı yok.`;
+    }
 
     return NextResponse.json({
       success: true,
-      banka: aiResult.banka || "Tespit Edilemedi",
-      seri: aiResult.seri || "---",
-      final_risk: aiResult.risk_skoru || 0,
-      risk_seviyesi: aiResult.risk_skoru > 60 ? "Riskli" : "Güvenli",
-      detay: aiResult.mesaj || "Analiz başarıyla tamamlandı."
+      firma: firmaAdi,
+      final_risk: riskScore,
+      risk_seviyesi: riskScore > 70 ? "Kritik" : riskScore > 40 ? "Orta" : "Güvenli",
+      detay: yorum
     });
 
   } catch (err: any) {
-    console.error("SERVER ERROR:", err.message);
-    return NextResponse.json({ success: false, error: "Sunucu hatası: " + err.message }, { status: 500 });
+    console.error("SERVER ERROR:", err);
+    return NextResponse.json({ success: false, error: "Analiz motoru hata verdi." }, { status: 500 });
   }
 }
