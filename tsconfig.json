@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-  ],
+, "src/app/cekapp-landing/Header.jsx", "src/lib/Marketplace/Hepsiburada.ts", "src/lib/Marketplace/Amazon.ts", "src/lib/Action.ts", "src/lib/Action.ts/DashboardActions", "src/lib/Analysis", "src/lib/Action/DashboardActions.ts"  ],
   "exclude": ["node_modules"]
 }

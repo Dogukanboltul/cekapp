@@ -1,28 +1,68 @@
 'use client';
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
-  Zap, Loader2, ShieldCheck, Search, Gavel, 
-  AlertTriangle, Target, Radio, Eye, ShieldAlert,
-  ChevronRight, BrainCircuit, CheckCircle2, Info,
-  TrendingDown, Scale, Library, Building2, Landmark
+  Zap, Loader2, BrainCircuit, CheckCircle2, 
+  ChevronRight, Scale
 } from "lucide-react";
+import { createClient } from '@/database/client';
 
-export default function MarketRadar() {
+interface MarketRadarProps {
+  onResult?: (analysis: any, query: string, canProceed: boolean) => void;
+  selectedResult?: any; 
+}
+
+export default function MarketRadar({ onResult, selectedResult }: MarketRadarProps) {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
 
+  // 🛡️ MERKEZİ KARAR MEKANİZMASI (KALE)
+  const processDecision = (result: any, companyName: string) => {
+    const isCritical = result.brain?.status === "CRITICAL";
+    if (onResult) {
+      // Eğer CRITICAL ise canProceed = false döner, aksi halde true.
+      onResult(result, companyName, !isCritical);
+    }
+  };
+
+  // ✅ Sidebar'dan seçim yapıldığında veriyi yükle ve kararı tetikle
+  useEffect(() => {
+    if (selectedResult) {
+      // 🧠 Hafızadan/DB'den gelen veriyi tam yapısına kavuştur
+      const dataToSet = selectedResult.brain_data || selectedResult;
+      
+      // Veri yapısı esnekliği için (brain objesi içindeyse veya direkt kendisiyse)
+      const finalData = dataToSet.brain ? dataToSet : { 
+        brain: {
+          status: selectedResult.status === 'completed' ? (selectedResult.risk_score < 30 ? 'CRITICAL' : 'STABLE') : (selectedResult.status || 'STABLE'),
+          score: selectedResult.risk_score?.toString() || "0",
+          insight: dataToSet.insight || "GEÇMİŞ SORGULAMA VERİSİ YÜKLENDİ.",
+          tags: dataToSet.tags || []
+        },
+        alerts: dataToSet.alerts || []
+      };
+
+      setAnalysis(finalData);
+      setQuery(selectedResult.company_name || selectedResult.tax_no || "");
+      
+      // Geçmişten seçilse dahi kale kontrolünü çalıştırarak Dashboard'u kilitle/aç
+      processDecision(finalData, selectedResult.company_name || selectedResult.tax_no || "");
+    }
+  }, [selectedResult]);
+
   const handleDeepScan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim()) return;
+    const cleanQuery = query.trim().toUpperCase();
+    if (!cleanQuery) return;
 
     setLoading(true);
     setAnalysis(null);
 
     try {
+      // 🌐 Search API Integration
       const serperKey = "8179010e4967fc4512262d77869b04f8a2b84dc8";
-      const searchQuery = `"${query}" (icra OR dava OR konkordato OR "borç yapılandırma" OR iflas OR "karşılıksız çek") site:ilan.gov.tr OR site:haberler.com OR site:memurlar.net`;
+      const searchQuery = `"${cleanQuery}" (icra OR dava OR konkordato OR "borç yapılandırma" OR iflas OR "karşılıksız çek") site:ilan.gov.tr OR site:haberler.com OR site:memurlar.net`;
 
       const response = await fetch("https://google.serper.dev/search", {
         method: "POST",
@@ -33,6 +73,7 @@ export default function MarketRadar() {
       const data = await response.json();
       const organic = data?.organic || [];
 
+      // 🔍 Risk Analiz Motoru
       const foundAlerts = organic.map((item: any) => {
         const text = (item.title + " " + item.snippet).toLowerCase();
         if (text.includes("icra")) return { type: 'DANGER', label: 'İCRA KAYDI', msg: item.title, link: item.link };
@@ -48,17 +89,35 @@ export default function MarketRadar() {
       
       const brainPower = {
         status: hasDanger ? "CRITICAL" : hasWarning ? "CAUTION" : "STABLE",
-        score: hasDanger ? "15/100" : hasWarning ? "55/100" : "98/100",
+        score: hasDanger ? "15" : hasWarning ? "55" : "98",
         summary: hasDanger ? "YÜKSEK RİSK: VARLIK HACZİ VEYA TASFİYE SİNYALİ." : "ORTA RİSK: ÖDEME DİSİPLİNİNDE DALGALANMA.",
         insight: hasDanger 
-          ? "Sistem, firma üzerinde aktif icra veya konkordato ilanı saptadı. Çek kabulü telafisi güç sermaye kaybına yol açabilir. İşlem durdurulmalı."
+          ? "Sistem aktif icra veya konkordato ilanı saptadı. İşlem durdurulmalı."
           : hasWarning 
-            ? "Piyasada ödeme alışkanlıklarına dair kısıtlı negatif veriler var. Vadeli işlemlerde ek teminat veya kısa vade stratejisi izlenmeli."
-            : "Dijital ayak izi ve resmi sicil kayıtları şeffaf. Yakın dönemde herhangi bir olumsuz finansal ilana rastlanmadı. Ticari güven tam.",
+            ? "Piyasada negatif veriler var. Vadeli işlemlerde ek teminat stratejisi izlenmeli."
+            : "Dijital ayak izi ve sicil kayıtları şeffaf. Yakın dönemde olumsuz bir ilana rastlanmadı.",
         tags: hasDanger ? ["İflas Riski", "Hukuki Blokaj"] : hasWarning ? ["Gecikme Riski", "Sınırlı Güven"] : ["Stabil Sicil", "Tam Onay"]
       };
 
-      setAnalysis({ alerts: foundAlerts.slice(0, 3), brain: brainPower });
+      const finalResult = { alerts: foundAlerts.slice(0, 3), brain: brainPower };
+      setAnalysis(finalResult);
+
+      // 🔥 DB KAYIT (UPSERT STRATEJİSİ)
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        await supabase.from('queries').upsert({
+          user_id: user.id,
+          tax_no: cleanQuery, 
+          company_name: cleanQuery,
+          risk_score: parseInt(brainPower.score),
+          status: 'completed',
+          brain_data: finalResult 
+        }, { onConflict: 'user_id, tax_no' });
+      }
+
+      processDecision(finalResult, cleanQuery);
 
     } catch (err) {
       console.error("Scan error:", err);
@@ -82,12 +141,12 @@ export default function MarketRadar() {
               </div>
               <div>
                 <h3 className="text-[11px] font-black text-white tracking-widest uppercase italic leading-none">RISK RADAR</h3>
-                <p className="text-[7px] font-bold text-teal-500/50 uppercase mt-1 italic tracking-tighter text-left">AKIL YÜRÜTME MOTORU</p>
+                <p className="text-[7px] font-bold text-teal-500/50 uppercase mt-1 italic tracking-tighter">AKIL YÜRÜTME MOTORU</p>
               </div>
             </div>
             {analysis && (
               <div className={`px-3 py-1 rounded-full border text-[9px] font-black italic tracking-tighter ${analysis.brain?.status === 'STABLE' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
-                RİSK SKORU: {analysis.brain?.score}
+                RİSK SKORU: %{analysis.brain?.score}
               </div>
             )}
           </div>
@@ -96,11 +155,11 @@ export default function MarketRadar() {
             <input 
               type="text" value={query} onChange={(e) => setQuery(e.target.value)}
               placeholder="FİRMA ÜNVANI SORGULA..."
-              className="flex-1 bg-black border border-white/10 rounded-xl px-4 py-4 text-[11px] font-black text-white outline-none focus:border-teal-900 uppercase italic placeholder:text-white/10 transition-all shadow-inner"
+              className="flex-1 bg-black border border-white/10 rounded-xl px-4 py-4 text-[11px] font-black text-white outline-none focus:border-teal-900 uppercase italic placeholder:text-white/10 transition-all"
             />
             <button 
               type="submit" disabled={loading} 
-              className="shrink-0 bg-teal-900 hover:bg-teal-800 w-12 h-12 flex items-center justify-center rounded-xl transition-all shadow-[0_0_15px_rgba(20,184,166,0.2)]"
+              className="shrink-0 bg-teal-900 hover:bg-teal-800 w-12 h-12 flex items-center justify-center rounded-xl transition-all"
             >
               {loading ? <Loader2 className="animate-spin text-white" size={20} /> : <Zap size={20} className="text-white fill-white" />}
             </button>
@@ -112,11 +171,8 @@ export default function MarketRadar() {
                 <div className="flex items-center justify-between mb-3 border-b border-white/5 pb-2">
                   <div className="flex items-center gap-2">
                     <Scale size={12} className={analysis.brain?.status === 'STABLE' ? 'text-emerald-500' : 'text-red-500'} />
-                    <span className={`text-[9px] font-black uppercase italic ${analysis.brain?.status === 'STABLE' ? 'text-emerald-500' : 'text-red-500'}`}>
-                       STRATEJİK ANALİZ
-                    </span>
+                    <span className={`text-[9px] font-black uppercase italic ${analysis.brain?.status === 'STABLE' ? 'text-emerald-500' : 'text-red-500'}`}>STRATEJİK ANALİZ</span>
                   </div>
-                  <Info size={12} className="text-white/20" />
                 </div>
                 
                 <p className="text-[11px] font-black text-white italic leading-relaxed uppercase mb-3">
@@ -130,8 +186,8 @@ export default function MarketRadar() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <p className="text-[8px] font-black text-slate-600 uppercase italic px-2 tracking-widest">SİCİL KANITLARI (TIKLANABİLİR):</p>
+              <div className="space-y-2 text-left">
+                <p className="text-[8px] font-black text-slate-600 uppercase italic px-2 tracking-widest">SİCİL KANITLARI:</p>
                 {analysis.alerts?.length > 0 ? (
                   analysis.alerts.map((alert: any, i: number) => (
                     <a 
@@ -143,9 +199,7 @@ export default function MarketRadar() {
                         <span className={`text-[8px] font-black uppercase italic ${alert.type === 'DANGER' ? 'text-red-500' : 'text-amber-500'}`}>{alert.label}</span>
                         <ChevronRight size={12} className="text-slate-700 group-hover/item:text-white transition-all" />
                       </div>
-                      <p className="text-[10px] font-black text-white/80 italic leading-snug uppercase line-clamp-2">
-                        {alert.msg}
-                      </p>
+                      <p className="text-[10px] font-black text-white/80 italic leading-snug uppercase line-clamp-2">{alert.msg}</p>
                     </a>
                   ))
                 ) : (
@@ -158,28 +212,6 @@ export default function MarketRadar() {
             </div>
           )}
         </div>
-      </div>
-
-      {/* VERİ KAYNAKLARI BANDI */}
-      <div className="bg-[#0b1222]/50 border border-white/5 rounded-[2rem] p-4 flex flex-col items-center gap-3">
-         <div className="flex items-center gap-1.5 opacity-30">
-            <Eye size={10} className="text-slate-400" />
-            <span className="text-[7px] font-black text-slate-400 uppercase italic tracking-widest">AKTİF VERİ KAYNAKLARI</span>
-         </div>
-         <div className="flex items-center justify-center gap-6 opacity-20 group-hover:opacity-50 transition-all duration-700">
-            <div className="flex items-center gap-1">
-              <Landmark size={12} className="text-white" />
-              <span className="text-[8px] font-black text-white italic">İLAN.GOV.TR</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Library size={12} className="text-white" />
-              <span className="text-[8px] font-black text-white italic">RESMİ GAZETE</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Building2 size={12} className="text-white" />
-              <span className="text-[8px] font-black text-white italic">GİB SİCİL</span>
-            </div>
-         </div>
       </div>
     </aside>
   );
