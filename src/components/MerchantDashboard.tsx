@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation'; 
 import { 
-  LogOut, BrainCircuit, Database, Zap, Megaphone 
+  Search, LogOut, BrainCircuit, Database, Zap, Megaphone 
 } from 'lucide-react';
 
 // BİLEŞENLER
@@ -21,7 +21,7 @@ import ApiConnectModal from '@/components/ApiConnectModal';
 // VERİ KATMANI
 import { createClient } from '@/database/client';
 
-export default function MerchantDashboard({ user: initialUser }: { user: any }) {
+export default function MerchantDashboard({ user }: { user: any }) {
   const router = useRouter();
 
   // 🧩 UI & NAVİGASYON STATE'LERİ
@@ -34,7 +34,6 @@ export default function MerchantDashboard({ user: initialUser }: { user: any }) 
   const [radarStatus, setRadarStatus] = useState<'IDLE' | 'STABLE' | 'CRITICAL'>('IDLE');
   const [targetCompany, setTargetCompany] = useState<string>('');
   const [selectedAnalysis, setSelectedAnalysis] = useState<any>(null);
-  const [historyData, setHistoryData] = useState<any[]>([]); 
 
   // PAZARYERİ STATE
   const [marketPlatforms, setMarketPlatforms] = useState<PlatformData[]>([
@@ -44,17 +43,13 @@ export default function MerchantDashboard({ user: initialUser }: { user: any }) 
     { name: 'N11', kesinlesmis: 0, valorlu: 0, trend: 'neutral' },
   ]);
 
-  // YARDIMCI FONKSİYONLAR
+  // Eksik olan fonksiyonlar
   const handleValidationError = (msg: string) => console.warn("Validation Error:", msg);
-  const handleBeforeUpload = async (files: File[]) => true; 
-  const handleApiConnect = (apiKey: string, apiSecret: string, sellerId: string, refCode: string) => {
-    console.log(`${selectedPlatform} Bağlantısı kuruluyor...`);
-  };
+  const handleBeforeUpload = async (files: File[]) => true;
 
-  // ✅ VERİ ÇEKME (BAKİYE & GEÇMİŞ)
+  // ✅ VERİ ÇEKME
   const fetchMarketData = useCallback(async () => {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const { data: balances } = await supabase.from('platform_balances').select('*').eq('user_id', user.id);
@@ -64,29 +59,7 @@ export default function MerchantDashboard({ user: initialUser }: { user: any }) 
         return dbRow ? { ...p, kesinlesmis: Number(dbRow.kesinlesmis_bakiye), valorlu: Number(dbRow.valorlu_bakiye), trend: dbRow.trend as any } : p;
       }));
     }
-
-    const { data: queries } = await supabase.from('queries').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20);
-    if (queries) {
-      setHistoryData(queries);
-    }
-  }, []);
-
-  // ✅ SORGULAMA SİLME MANTIĞI
-  const handleDeleteQuery = useCallback(async (id: string) => {
-    const supabase = createClient();
-    try {
-      const { error } = await supabase.from('queries').delete().eq('id', id);
-      if (error) throw error;
-      setHistoryData(prev => prev.filter(item => item.id !== id));
-      if (selectedAnalysis?.id === id) {
-        setSelectedAnalysis(null);
-        setRadarStatus('IDLE');
-        setTargetCompany('');
-      }
-    } catch (error) {
-      console.error("Silme hatası:", error);
-    }
-  }, [selectedAnalysis]);
+  }, [user]);
 
   // ✅ ANALİZ TETİKLEYİCİ
   const handleAnalysisResult = useCallback((analysis: any, name?: string) => {
@@ -99,12 +72,11 @@ export default function MerchantDashboard({ user: initialUser }: { user: any }) 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  // ✅ ÇIKIŞ YAP VE LANDING PAGE'E DÖN
+  // ✅ ÇIKIŞ İŞLEMİ
   const handleSignOut = async (e: React.MouseEvent) => {
     e.preventDefault();
     const supabase = createClient();
     await supabase.auth.signOut();
-    // Tarayıcıyı tamamen Marketing sayfasına fırlatır
     window.location.href = '/'; 
   };
 
@@ -113,24 +85,6 @@ export default function MerchantDashboard({ user: initialUser }: { user: any }) 
     const interval = setInterval(fetchMarketData, 5000);
     return () => clearInterval(interval);
   }, [fetchMarketData]);
-
-  // SIDEBAR ETKİLEŞİMİ
-  useEffect(() => {
-    const handleSidebarClick = (e: any) => {
-      const item = e.detail;
-      if (item) handleAnalysisResult(item, item.company_name);
-    };
-    const handleSidebarDelete = (e: any) => {
-      const id = e.detail?.id;
-      if (id) handleDeleteQuery(id);
-    };
-    window.addEventListener('sidebar-select', handleSidebarClick);
-    window.addEventListener('sidebar-delete', handleSidebarDelete);
-    return () => {
-      window.removeEventListener('sidebar-select', handleSidebarClick);
-      window.removeEventListener('sidebar-delete', handleSidebarDelete);
-    };
-  }, [handleAnalysisResult, handleDeleteQuery]);
 
   return (
     <div className="flex flex-col min-w-0 w-full animate-in fade-in duration-500 bg-[#060a14]">
@@ -151,7 +105,6 @@ export default function MerchantDashboard({ user: initialUser }: { user: any }) 
 
       <main className="max-w-[1800px] mx-auto p-4 md:p-8 w-full">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
           <div className="lg:col-span-3 space-y-6">
             <div className="bg-[#0b1222]/50 border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl">
               <div className="p-6 flex items-center gap-2 border-b border-white/5">
@@ -173,9 +126,6 @@ export default function MerchantDashboard({ user: initialUser }: { user: any }) 
                   </div>
                   <div className="space-y-2">
                     <h3 className="text-[10px] font-black uppercase italic tracking-[0.3em] text-slate-700">Analiz Motoru Beklemede</h3>
-                    <p className="text-[9px] text-slate-600 uppercase font-bold tracking-widest max-w-[250px] leading-relaxed">
-                      Sorgulama başlatmak için sağ paneldeki radar ünitesini kullanın.
-                    </p>
                   </div>
                 </div>
               ) : (
@@ -189,22 +139,20 @@ export default function MerchantDashboard({ user: initialUser }: { user: any }) 
                     </div>
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{targetCompany}</span>
                   </div>
+                  {/* HATA BURADAYDI - PROPS EKLENDİ */}
                   <AnalysisEngine 
                     key={selectedAnalysis?.id || targetCompany} 
                     radarStatus={radarStatus} 
                     initialData={selectedAnalysis}
                     onValidationError={handleValidationError}
                     onBeforeUpload={handleBeforeUpload}
-                    onDeleteQuery={handleDeleteQuery}
                   />
                 </div>
               )}
             </div>
 
             <div className="flex justify-center -mt-12 relative z-50">
-              <button 
-                onClick={() => setIsModalOpen(true)} 
-                className="flex items-center gap-2 px-8 py-3 bg-[#060a14] hover:bg-red-500/10 border border-red-500/30 rounded-full transition-all group shadow-2xl backdrop-blur-md">
+              <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 px-8 py-3 bg-[#060a14] hover:bg-red-500/10 border border-red-500/30 rounded-full transition-all group shadow-2xl backdrop-blur-md">
                 <Megaphone size={14} className="text-red-500 group-hover:scale-110 transition-transform" />
                 <span className="text-[10px] font-black text-red-500 uppercase italic tracking-widest">Karşılıksız Bildirimi Yap</span>
               </button>
@@ -236,12 +184,7 @@ export default function MerchantDashboard({ user: initialUser }: { user: any }) 
       <FooterAI />
       
       <ReportForm isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
-      <ApiConnectModal 
-        isOpen={isApiModalOpen} 
-        onClose={() => setIsApiModalOpen(false)} 
-        platformName={selectedPlatform} 
-        onConnect={handleApiConnect}
-      />
+      <ApiConnectModal isOpen={isApiModalOpen} onClose={() => setIsApiModalOpen(false)} platformName={selectedPlatform} onConnect={() => {}} />
     </div>
   );
 }

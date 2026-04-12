@@ -25,6 +25,7 @@ export default function ApiConnectModal({ isOpen, onClose, platformName, onConne
     
     // Güvenli Senkronizasyon Simülasyonu
     setTimeout(() => {
+      // ✅ Dashboard'daki onConnect beklentisine uygun parametre gönderimi
       onConnect(apiKey, apiSecret, sellerId, refCode);
       setLoading(false);
       
@@ -108,7 +109,7 @@ export default function ApiConnectModal({ isOpen, onClose, platformName, onConne
                     required
                     type="password" 
                     value={apiSecret}
-                    onChange={(e) => setApiKey(e.target.value)} // Dikkat: Bu dashboard kısmındaki hatayı önlemek için setApiSecret olarak kullanıldı
+                    onChange={(e) => setApiSecret(e.target.value)} // ✅ Düzeltildi: setApiKey yerine setApiSecret
                     className="w-full bg-white/[0.03] border border-white/10 p-4 rounded-2xl focus:border-teal-500/50 outline-none transition-all text-sm text-white"
                   />
                   <Lock size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/10" />

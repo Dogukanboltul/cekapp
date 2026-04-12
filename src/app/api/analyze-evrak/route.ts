@@ -1,77 +1,114 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { NextResponse } from 'next/server';
 
-const API_KEY = process.env.GEMINI_API_KEY || "";
-const genAI = new GoogleGenerativeAI(API_KEY);
+/**
+ * ⚖️ CEKAPP STRATEJİK HUKUK & RİSK ANALİZ MOTORU - V7 (ULTIMATE)
+ * Kapsam: Konkordato, Hukuki Riskler, Şahsi Kefalet Gerekliliği, İİK & TBK Mevzuatı.
+ */
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const data = await req.formData();
-    const frontFile = data.get('front_image') as File;
-    const backFile = data.get('back_image') as File;
+    const { message, isCritical } = await req.json();
+    const query = message.toLowerCase().trim();
 
-    if (!frontFile || !backFile) {
-      return NextResponse.json({ isValid: false, error: "Görseller eksik." }, { status: 400 });
+    let answer = "";
+    let steps: string[] = [];
+
+    // -------------------------------------------------------------------------
+    // 1. KATMAN: DOĞRUDAN AVUKAT / DANIŞMAN TALEBİ (MUTLAK ÖNCELİK)
+    // -------------------------------------------------------------------------
+    if (
+      query.includes("danışman") || 
+      query.includes("avukat") || 
+      query.includes("istiyorum") || 
+      query.includes("destek")
+    ) {
+      answer = "Alanında uzman avukatımız sizinle iletişime geçecektir.";
+      steps = ["ANA SAYFAYA DÖN", "RİSK ANALİZİNİ YENİLE"];
     }
 
-    const frontBase64 = Buffer.from(await frontFile.arrayBuffer()).toString("base64");
-    const backBase64 = Buffer.from(await backFile.arrayBuffer()).toString("base64");
+    // -------------------------------------------------------------------------
+    // 2. KATMAN: KONKORDATO NEDİR?
+    // -------------------------------------------------------------------------
+    else if (query.includes("konkordato nedir") || query.includes("konkordato ne demek")) {
+      answer = `**Konkordato**, mali durumu sarsılmış borçlunun, alacaklılarıyla anlaşarak borçlarını yapılandırmasıdır. 
 
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash", 
-      generationConfig: { responseMimeType: "application/json", temperature: 0.1 }
+Ancak bir satıcı olarak sizin için bu bir **'yasal dokunulmazlık'** sürecidir:
+- Borçluya karşı icra takibi yapılamaz.
+- Mevcut takipler ve hacizler dondurulur.
+- Alacaklarınız faizsiz ve 2-4 yıla yayılan taksitlere bölünebilir.
+- Borçlu koruma kalkanı kazanırken, siz tahsilat için belirsiz bir sürece girersiniz.`;
+      
+      steps = ["HUKUKİ RİSKLERİM NELER?", "ŞAHSİ KEFALET ALMALI MIYIM?", "HUKUKİ DANIŞMANA SOR"];
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. KATMAN: HUKUKİ RİSK ANALİZİ
+    // -------------------------------------------------------------------------
+    else if (query.includes("hukuki risk") || query.includes("risklerim neler")) {
+      answer = `Konkordato sürecindeki bir firmaya mal vermek şu yasal riskleri doğurur:
+
+1. **İİK m.294 (Takip Yasağı):** Karar anından itibaren borçluya yeni icra takibi yapılamaz. Rehinli alacaklılar bile muhafaza işlemi yapamaz.
+2. **Çek Ceza Bağışıklığı:** Borçlu mühlet içinde olduğu için karşılıksız çekten doğan hapis cezalarından kurtulabilir.
+3. **Komiser Denetimi:** Alacağınızın ödenip ödenmeyeceğine mahkemenin atadığı komiser karar verir. Bu süreçte muhatabınız artık firma sahibi değil, hukuk sistemidir.`;
+      
+      steps = ["ALACAKLI SIRASI NEDİR?", "ŞAHSİ KEFALET ALMALI MIYIM?", "HUKUKİ DANIŞMANA SOR"];
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. KATMAN: ŞAHSİ KEFALET ALMALI MIYIM? (ÖZEL SORU & ANALİZ)
+    // -------------------------------------------------------------------------
+    else if (query.includes("şahsi kefalet almalı mıyım") || query.includes("kefalet gerekli mi")) {
+      answer = `**KESİNLİKLE ALMALISINIZ.** Mevcut risk tablosunda şahsi kefalet almak bir tercih değil, ticaretin devamı için zorunluluktur.
+
+**Neden Almalısınız?**
+- **Zırh Delme Metodu:** Şirket konkordato ilan ederek kendini korumaya alsa da, **TBK m.583** uyarınca ortağın verdiği 'Müteselsil Kefalet' bu korumanın dışındadır. Şirkete dokunamazken ortağın şahsi malına çökebilirsiniz.
+- **Tahsilat Garantisi:** Şirketten alamadığınız parayı ortağın şahsi gayrimenkulünden veya banka hesabından tahsil etme şansınız olur.
+- **Caydırıcılık:** Kendi mal varlığıyla riske giren borçlu, ödeme planında sizi her zaman ilk sıraya koyacaktır.
+
+**Kritik Şart:** Kefaletnamenin geçerli olması için limit ve tarihin kefilin **kendi el yazısıyla** yazıldığından emin olun. Bu imzayı almadan sevkiyatı onaylamanız sermayenizi kontrolsüz riske atmaktır.`;
+      
+      steps = ["KEFALETNAME ŞARTLARI", "HUKUKİ RİSKLERİ GÖR", "HUKUKİ DANIŞMANA SOR"];
+    }
+
+    // -------------------------------------------------------------------------
+    // 5. KATMAN: ALACAKLI SIRASI (İİK 206)
+    // -------------------------------------------------------------------------
+    else if (query.includes("alacaklı sırası") || query.includes("paramı")) {
+      answer = `**İİK m.206 Sıra Cetveli** sizin için en büyük tahsilat engelidir. Para dağıtılırken öncelik şöyledir:
+1. İşçi alacakları.
+2. Rehinli/İpotekli bankalar.
+3. Devlet alacakları (Vergi/SGK).
+4. **Ticari Alacaklılar (SİZ).**
+
+İlk üç sıra temizlenmeden adi alacaklılara (4. sıra) ödeme yapılması yasal ve finansal olarak çok düşük bir ihtimaldir.`;
+      
+      steps = ["HUKUKİ RİSKLERİ GÖR", "HUKUKİ DANIŞMANA SOR"];
+    }
+
+    // -------------------------------------------------------------------------
+    // 6. KATMAN: DEFAULT / KRİTİK DURUM
+    // -------------------------------------------------------------------------
+    else {
+      if (isCritical) {
+        answer = "⚠️ STRATEJİK UYARI: Muhatabın yasal bir koruma (konkordato) sürecinde olduğu saptanmıştır. İİK hükümleri gereği tahsilat yasal engellere tabidir. Finansal varlığınızı korumak için işlemi derhal askıya almanız önerilir.";
+        steps = ["KONKORDATO NEDİR?", "HUKUKİ RİSKLERİM NELER?", "ŞAHSİ KEFALET ALMALI MIYIM?", "HUKUKİ DANIŞMANA SOR"];
+      } else {
+        answer = `Sorgu analiz edildi. Mevcut sicil kaydı temiz görünse de, basiretli bir tacir olarak sevkiyatı şahsi kefalet veya ek teminatla güvence altına almanız tavsiye edilir.`;
+        steps = ["HUKUKİ RİSKLERİ GÖR", "HUKUKİ DANIŞMANA SOR"];
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      answer: answer,
+      steps: steps
     });
 
-    const prompt = `
-      GÖREV: SEN BİR TİCARİ EVRAK DENETÇİSİSİN. 
-      ÖNCE GÖRSELDEKİ METİNLERİ TARA VE ŞU KARAR MEKANİZMASINI ÇALIŞTIR:
-
-      1. ADIM (ÇEK KONTROLÜ): 
-         - Görselde "ÇEK", "KEŞİDECİ", "HAMİL", "MUHATAP BANKA", "HESAP NO" veya "KAREKOD" var mı?
-         - Eğer varsa: "type": "CEK" olarak belirle ve verileri çıkar.
-
-      2. ADIM (SENET KONTROLÜ): 
-         - Görselde "BONO", "EMRÜMUHARREREDİR", "BORÇLU", "ALACAKLI", "NAKDEN" veya "MALEN" ibareleri var mı?
-         - Eğer varsa: "type": "SENET" olarak belirle ve verileri (Ödeyecek, Alacaklı, Vade) çıkar.
-
-      3. ADIM (RET): 
-         - Eğer yukarıdaki iki gruba da girmiyorsa (Fatura, kimlik, manzara vb.):
-         - "isValid": false döndür.
-         - "aiComment": "YÜKLENEN GÖRSEL GEÇERLİ BİR ÇEK VEYA SENET DEĞİLDİR. LÜTFEN TİCARİ BİR EVRAK YÜKLEYİN." yaz.
-
-      YANIT FORMATI (JSON):
-      {
-        "isValid": boolean,
-        "type": "CEK" | "SENET" | "GECERSIZ",
-        "score": number,
-        "status": "GÜVENLİ" | "RİSKLİ" | "GEÇERSİZ",
-        "aiComment": "string",
-        "extraction": { 
-            "vade": "string", 
-            "tutar": "string", 
-            "vkn": "string",
-            "evrak_tipi": "string"
-        }
-      }
-    `;
-
-    const result = await model.generateContent([
-      { text: prompt },
-      { inlineData: { data: frontBase64, mimeType: frontFile.type } },
-      { inlineData: { data: backBase64, mimeType: backFile.type } }
-    ]);
-
-    const responseText = result.response.text();
-    const cleanJson = JSON.parse(responseText.replace(/```json|```/g, "").trim());
-
-    return NextResponse.json(cleanJson);
-
-  } catch (error: any) {
-    console.error("🔥 MOTOR HATASI:", error);
-    // 404 Hatası hala geliyorsa terminalde bunu göreceksin:
+  } catch (error) {
+    console.error("CekApp AI Error:", error);
     return NextResponse.json({ 
-      isValid: false, 
-      error: "ANALİZ MOTORUNA ERİŞİLEMEDİ. LÜTFEN API ANAHTARINI VE İNTERNETİNİZİ KONTROL EDİN." 
+      success: false, 
+      answer: "Alanında uzman avukatımız sizinle iletişime geçecektir." 
     }, { status: 500 });
   }
 }

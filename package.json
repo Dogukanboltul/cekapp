@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@supabase/ssr": "^0.10.0",
-    "@supabase/supabase-js": "^2.101.1",
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.103.0",
     "axios": "^1.13.6",
     "browser-image-compression": "^2.0.2",
     "cheerio": "^1.2.0",
@@ -24,7 +24,8 @@
     "openai": "^6.33.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "recharts": "^3.8.0",
+    "recharts": "^3.8.1",
+    "styled-jsx": "^5.1.7",
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
